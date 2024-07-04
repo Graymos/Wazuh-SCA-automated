@@ -14,7 +14,7 @@ RESET='\e[0m'
 
 # SSH
 
-echo -e "${CYAN}All sshd_config settings that this script makes is in /etc/ssh/sshd_config.d/SCA-script.conf so if any settings are conflicting with needed purpose of machine, this is where you would modify settings${RESET}"
+echo -e "${CYAN}SSH:\n   All sshd_config settings that this script makes is in /etc/ssh/sshd_config.d/SCA-script.conf so if any settings are conflicting with needed purpose of machine, this is where you would modify settings${RESET}"
 ## Checks if SCA-script.conf file exists (will only happen this one time in the whole script, everything for ssh comes after this) and sets $file
 file="/etc/ssh/sshd_config.d/SCA-script.conf"
 echo -e " - Checking file for SSH rules: $file"
@@ -31,6 +31,9 @@ fi
 ssh_function() {
     local pattern="$1"
     if grep -q "$pattern" "$file"; then
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Error:${RESET} Command failed for searching for \"$pattern\" in $file."
+        fi
         echo -e "${GREEN} - \"$pattern\" rule already set in $file${RESET}"
     else
         echo -e "${YELLOW} - Adding \"$pattern\" rule in $file${RESET}"
@@ -55,7 +58,8 @@ ssh_function "UsePAM yes"
 ## Ensure SSH root login is disabled.
 ssh_function "PermitRootLogin no"
 
-## 
+## Ensure SSH HostbasedAuthentication is disabled.
+ssh_function "HostbasedAuthentication no"
 
 ### After this point it deals with everything outside of SCA-script.conf
 ### Needs cleanup and to be made into a function that automatically searches a folder/file perms and user/group ownership and correct them to function parameters
