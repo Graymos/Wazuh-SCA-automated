@@ -28,7 +28,7 @@ else
 fi
 
 ## Function that ssh SCA checks and modifications use for file /etc/ssh/sshd_config.d/SCA-script.conf
-ssh_function() {
+sca_script_config_function() {
     local pattern="$1"
     if grep -q "$pattern" "$file"; then
         if [ $? -ne 0 ]; then
@@ -47,21 +47,38 @@ ssh_function() {
 
 
 ## Ensure SSH access is limited. (restricted ssh access to sudoers, all unprivledged are unrestricted)
-ssh_function "DenyGroups sudo"
+sca_script_config_function "DenyGroups sudo"
 
 ## Ensure SSH LogLevel is appropriate. (setting LogLevel to VERBOSE)
-ssh_function "LogLevel VERBOSE"
+sca_script_config_function "LogLevel VERBOSE"
 
 ## Ensure SSH PAM is enabled.
-ssh_function "UsePAM yes"
+sca_script_config_function "UsePAM yes"
 
 ## Ensure SSH root login is disabled.
-ssh_function "PermitRootLogin no"
+sca_script_config_function "PermitRootLogin no"
 
 ## Ensure SSH HostbasedAuthentication is disabled.
-ssh_function "HostbasedAuthentication no"
+sca_script_config_function "HostbasedAuthentication no"
 
-### After this point it deals with everything outside of SCA-script.conf
+## Ensure SSH PermitEmptyPasswords is disabled.
+sca_script_config_function "PermitEmptyPasswords no"
+
+## Ensure SSH PermitUserEnvironment is disabled.
+sca_script_config_function "PermitUserEnvironment no"
+
+## Ensure SSH IgnoreRhosts is enabled.
+sca_script_config_function "IgnoreRhosts yes"
+
+## Ensure SSH X11 forwarding is disabled.
+sca_script_config_function "X11Forwarding no"
+
+## Ensure only strong Ciphers are used. (Only used FIPS 140-2 (potentially FIPS 140-3) compliant ciphers
+sca_script_config_function "Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
+
+##
+
+### Everything after this point deals with everything outside of SCA-script.conf
 ### Needs cleanup and to be made into a function that automatically searches a folder/file perms and user/group ownership and correct them to function parameters
 
 ## Proper root:root user and group ownership and proper perms for sshd_config file (This and ensuring perms on pub host key files should be last 2 in SSH part of script)
