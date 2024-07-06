@@ -76,74 +76,78 @@ sca_script_config_function "X11Forwarding no"
 ## Ensure only strong Ciphers are used. (Only used FIPS 140-2 (potentially FIPS 140-3) compliant ciphers
 sca_script_config_function "Ciphers aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
 
-##
+## Ensure only strong MAC algorithms are used.
+sca_script_config_function "MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,umac-128-etm@openssh.com,umac-128@openssh.com"
+
+## Ensure only strong Key Exchange algorithms are used.
+sca_script_config_function "KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256"
+
+## Ensure SSH AllowTcpForwarding is disabled.
+sca_script_config_function "AllowTcpForwarding no"
+
+## Ensure SSH warning banner is configured.
+sca_script_config_function "Banner /etc/issue.net"
+
+## Ensure SSH MaxAuthTries is set to 4 or less.
+sca_script_config_function "MaxAuthTries 4"
+
+## Ensure SSH MaxStartups is configured.
+sca_script_config_function "MaxStartups 10:30:60"
+
+## Ensure SSH LoginGraceTime is set to one minute or less.
+sca_script_config_function "LoginGraceTime 60"
+
+## Ensure SSH MaxSessions is set to 10 or less.
+sca_script_config_function "MaxSessions 10"
+
+## Ensure SSH Idle Timeout Interval is configured.
+sca_script_config_function "ClientAliveInterval 15"
+sca_script_config_function "ClientAliveCountMax 3"
 
 ### Everything after this point deals with everything outside of SCA-script.conf
 ### Needs cleanup and to be made into a function that automatically searches a folder/file perms and user/group ownership and correct them to function parameters
 
-## Proper root:root user and group ownership and proper perms for sshd_config file (This and ensuring perms on pub host key files should be last 2 in SSH part of script)
-l_pmask="0177"
-l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask)) )"
+## checking perms and ownership (changing to root) of file
+perms_ownership_check() {
+    local l_pmask="$1"
+    local l_dir="$2"
+    local l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask)) )"
 
-awk '{print}' <<< "$(find -L /etc/ssh/sshd_config -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
-    while read -r l_file l_mode l_owner l_group; do
-        echo -e " - Checking file: \"$l_file\""
-        if [ $(( l_mode & l_pmask )) -gt 0 ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
-            chmod u-x,og-rwx "$l_file"
-        else
-            echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
-        fi
-        if [ "$l_owner" != "root" ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"root\"${RESET}"
-            chown root "$l_file"
-        else
-            echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
-        fi
-        if [ "$l_group" != "root" ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"root\"${RESET}"
-            chgrp "root" "$l_file"
-        else
-            echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
-        fi
-    done
-)
+    awk '{print}' <<< "$(find -L $l_dir -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
+        while read -r l_file l_mode l_owner l_group; do
+            echo -e " - Checking file: \"$l_file\""
+            if [ $(( l_mode & l_pmask )) -gt 0 ]; then
+                echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
+                chmod u-x,og-rwx "$l_file"
+            else
+                echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
+            fi
+            if [ "$l_owner" != "root" ]; then
+                echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"root\"${RESET}"
+                chown root "$l_file"
+            else
+                echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
+            fi
+            if [ "$l_group" != "root" ]; then
+                echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"root\"${RESET}"
+                chgrp "root" "$l_file"
+            else
+                echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
+            fi
+        done
+    )
+}
 
+## Checking root user and group ownership and proper perms of files/all files in a dir (This and ensuring perms on pub/priv key files should be last 2 parts in SSH part of script)
+perms_ownership_check "0177" "/etc/ssh/sshd_config"
+perms_ownership_check "0177" "/etc/ssh/sshd_config.d"
 
-## Proper root:root user and group ownership and proper perms for all files in sshd_config.d dir (This and ensuring perms on pub host key files should be last 2 in SSH part of script)
-l_pmask="0177"
-l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask)) )"
-awk '{print}' <<< "$(find -L /etc/ssh/sshd_config.d -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
-    while read -r l_file l_mode l_owner l_group; do
-        echo -e " - Checking file: \"$l_file\""
-        if [ $(( l_mode & l_pmask )) -gt 0 ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
-            chmod u-x,og-rwx "$l_file"
-        else
-            echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
-        fi
-        if [ "$l_owner" != "root" ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"root\"${RESET}"
-            chown root "$l_file"
-        else
-            echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
-        fi
-        if [ "$l_group" != "root" ]; then
-            echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"root\"${RESET}"
-            chgrp "root" "$l_file"
-        else
-            echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
-        fi
-    done
-)
 ## Ensure permissions on SSH public host key files are configured.
-
 l_pmask="0133"
 l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask )) )"
-
 awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
     while read -r l_file l_mode l_owner l_group; do
-        if file "$l_file" | grep -Pq ':\h+OpenSSH\h+(\H+\h+)?public\h+key\b'; then
+        if file "$l_file" | grep -Pq ':\h+OpenSSH\h+(\H+\h+)?$type-of-ssh-key-file\h+key\b'; then
             echo -e " - Checking public key file: \"$l_file\""
             if [ $(( l_mode & l_pmask )) -gt 0 ]; then
                 echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
@@ -161,16 +165,15 @@ awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G
                 echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"root\"${RESET}"
                 chgrp "root" "$l_file"
             else
-                echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
+                 echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
             fi
         fi
     done
 )
-## Ensure permissions on SSH private host key files are configured.
 
+## Ensure permissions on SSH private host key files are configured.
 l_pmask="0377"
 l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask )) )"
-
 awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
     while read -r l_file l_mode l_owner l_group; do
         if file "$l_file" | grep -Pq ':\h+OpenSSH\h+(\H+\h+)?private\h+key\b'; then
