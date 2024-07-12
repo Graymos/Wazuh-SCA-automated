@@ -38,7 +38,7 @@ error_check_func() {
         echo -e "${RED}Error:${RESET} $message"
         return 1 #returns 1 means is an error
     fi
-    return 0 
+    return 0
 }
 
 ## Function that checks a file for a pattern and adds the specified pattern to file if not found
@@ -64,28 +64,34 @@ file_pattern_check_func() {
 
 ## Function for checking perms and ownership (changing to root) of file
 perms_ownership_check_func() {
-    local l_pmask="$1"
-    local l_dir="$2"
-    local l_maxperm="$( printf '%o' $(( 0777 & ~$l_pmask)) )"
+    local l_maxperm="$1"
+    local l_owner_parameter="$2"
+    local l_group_parameter="$3"
+    local l_dir="$4"
+    local l_pmask="$( printf '%o' $(( 0777 & ~$l_maxperm)) )"
+    l_pmask="0$l_pmask" # fixing so then it will be 4 digits instead of 3 with leading 0
 
     awk '{print}' <<< "$(find -L $l_dir -xdev -type f -exec stat -Lc "%n %#a %U %G" {} +)" | (
         while read -r l_file l_mode l_owner l_group; do
-            echo -e " - Checking file: \"$l_file\""
+            echo -e " - Checking file permissions and user/group ownership: \"$l_file\""
             if [ $(( l_mode & l_pmask )) -gt 0 ]; then
                 echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
-                chmod u-x,og-rwx "$l_file"
+                chmod "$l_maxperm" "$l_file"
+                add_to_changes_count_func "5"
             else
                 echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
             fi
-            if [ "$l_owner" != "root" ]; then
-                echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"root\"${RESET}"
-                chown root "$l_file"
+            if [ "$l_owner" != "$l_owner_parameter" ]; then
+                echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"$l_owner_parameter\"${RESET}"
+                chown "$l_owner_parameter" "$l_file"
+                add_to_changes_count_func "5"
             else
                 echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
             fi
-            if [ "$l_group" != "root" ]; then
-                echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"root\"${RESET}"
-                chgrp "root" "$l_file"
+            if [ "$l_group" != "$l_group_parameter" ]; then
+                echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"$l_group_parameter\"${RESET}"
+                chgrp "$l_group_parameter" "$l_file"
+		add_to_changes_count_func "5"
             else
                 echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
             fi
@@ -97,7 +103,7 @@ perms_ownership_check_func() {
 ## Checks if a file exists, if it doesnt then creates it
 file_exist_func() {
     local l_file="$1"
-    echo -e " - Checking if file exists: "
+    echo -e " - Checking if file \"$l_file\" exists: "
     if [ -f "$l_file" ]; then
         echo -e "${GREEN} - $l_file exists${RESET}"
     else
@@ -107,6 +113,29 @@ file_exist_func() {
         return 5
     fi
     return 0
+}
+
+## Checks if an app (package) is installed, if installed asks if needed and if not then uninstalls
+uninstall_app_func() {
+    local app="$1"
+    local reason="$2"
+    local answer='null'
+    dpkg-query -W -f='${binary:Package}\t${Status}\t${db:Status-Status}\n' "$app" 2>/dev/null | grep -q 'ok'
+    if [ $? -eq 0 ]; then
+        echo -e "${YELLOW} - $app is installed.${RESET}"
+        echo -e "${YELLOW}Reason to uninstall \"$app\": ${RESET}${CYAN}$reason${RESET}"
+        echo -e -n "${YELLOW}Uninstall? (default n) (y/n): ${RESET}"
+        read answer
+        answer=${answer,,}  # This converts answer to lowercase
+        if [ $answer == 'y' ] 2>/dev/null; then
+            apt purge "$app" -y
+            error_check_func "Error uninstalling \"$app\""
+        else
+            echo -e "${YELLOW} - $app skipped.${RESET}"
+        fi
+    else
+        echo -e "${GREEN} - $app isnt installed.${RESET}"
+    fi
 }
 
 # --Start of script--
@@ -130,7 +159,7 @@ add_to_changes_count_func
 
 ##File used for all added ssh config rules
 ssh_file="/etc/ssh/sshd_config.d/SCA-script.conf"
-
+echo " - Checking $ssh_file rules:"
 ## Ensure SSH access is limited. (restricted ssh access to sudoers, all unprivledged are unrestricted)
 file_pattern_check_func "DenyGroups sudo" "$ssh_file"
 add_to_changes_count_func
@@ -194,8 +223,8 @@ add_to_changes_count_func
 ## --SCA-script.conf added rules ends here--
 
 # Checking root user and group ownership and proper perms of files/all files in a dir (This and ensuring perms on pub/priv key files should be last 2 parts in SSH part of script)
-perms_ownership_check_func "0177" "/etc/ssh/sshd_config"
-perms_ownership_check_func "0177" "/etc/ssh/sshd_config.d"
+perms_ownership_check_func "0600" "root" "root" "/etc/ssh/sshd_config"
+perms_ownership_check_func "0600" "root" "root" "/etc/ssh/sshd_config.d"
 
 ## Ensure permissions on SSH public host key files are configured. (cant use function because added condition)
 l_pmask="0133"
@@ -206,7 +235,7 @@ awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G
             echo -e " - Checking public key file: \"$l_file\""
             if [ $(( l_mode & l_pmask )) -gt 0 ]; then
                 echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
-                chmod u-x,go-wx "$l_file"
+                chmod "$l_maxperm" "$l_file"
             else
                 echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
             fi
@@ -255,18 +284,18 @@ awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G
     done
 )
 
-##restarting ssh if changes made so applies new rules
+## Restarting ssh if changes made so applies new rules
 
 if [ $changes_count -ne 0 ]; then
-    systemctl restart ssh
-    echo "Pausing for 10 seconds to let ssh restart"
+    systemctl reload ssh
+    echo "Pausing for 10 seconds to let ssh reload"
     sleep 1
     reset_changes_count_func
 fi
 
 # --SSH ends here--
 
-# Checks if root user has password
+## Checks if root user has password
 echo " - Checking root password"
 if [ "$(grep '^root:' '/etc/shadow' | cut -d: -f2)" != "*" ]
 then
@@ -275,10 +304,11 @@ else
     echo -e "${YELLOW} - Root password may be disabled or not set (empty password hash):${RESET}"
     passwd root
     error_check_func "Couldn't set root passwd"
+    add_to_changes_count_func
 fi
 
-# Ensure message of the day is configured properly.
-echo " - Checking MOTD (removing /etc/motd and using /etc/issue.net instead)"
+## Ensure message of the day is configured properly.
+echo " - Checking /etc/issue.net"
 if test -f /etc/issue.net; then
     if grep -q "Authorized use only. All activity may be monitored and reported." "/etc/issue.net"; then
         file_pattern_check_func "Authorized use only. All activity may be monitored and reported." "/etc/issue.net"
@@ -292,6 +322,7 @@ if test -f /etc/issue.net; then
 fi
 
 ## Using issue.net, dont need motd so removes it
+echo " - Checking /etc/motd (removing)"
 if test -f /etc/motd; then
     rm /etc/motd
     error_check_func "Failed to remove /etc/motd"
@@ -300,4 +331,35 @@ else
     echo -e "${GREEN} - /etc/motd already non-existent${RESET}"
 fi
 
-# 
+## Ensure local login warning banner is configured properly
+echo " - Checking /etc/issue"
+if test -f /etc/issue; then
+   if grep -q "Authorized use only. All activity may be monitored and reported." "/etc/issue"; then
+        file_pattern_check_func "Authorized use only. All activity may be monitored and reported." "/etc/issue"
+   else
+        file_pattern_check_func "Authorized use only. All activity may be monitored and reported." "/etc/issue"
+        echo "Authorized use only. All activity may be monitored and reported." > "/etc/issue"
+   fi
+fi
+
+## Ensure permissions on /etc/issue are configured.
+perms_ownership_check_func "0644" "root" "root" "/etc/issue"
+error_check_func "Couldn't set permissions or user/group ownership on /etc/issue"
+
+## Ensure permissions on /etc/issue.net are configured.
+perms_ownership_check_func "0644" "root" "root" "/etc/issue.net"
+error_check_func "Couldn't set permissions or user/group ownership on /etc/issue.net"
+
+
+# Checking all apps that shouldnt (security reasons) be installed unless needed
+echo " - Checking applications to reduce the attack surface (not necessarily insecure but it can increase attack surface)"
+## Ensure X Window System is not installed
+uninstall_app_func "xserver-xorg" "The X Window System provides a Graphical User Interface (GUI) where users can have multiple windows in which to run programs and various add on. The X Windows system is typically used on workstations where users login, but not on servers where users typically do not login. Unless your organization specifically requires graphical login access via X Windows, remove it to reduce the potential attack surface."
+
+## Ensure telnet client is not installed.
+uninstall_app_func "telnet" "The telnet package contains the telnet client, which allows users to start connections to other systems via the telnet protocol. The telnet protocol is insecure and unencrypted. The use of an unencrypted transmission medium could allow an unauthorized user to steal credentials. The ssh package provides an encrypted session and stronger security and is included in most Linux distributions."
+
+## Ensure Avahi Server is not installed.
+uninstall_app_func "avahi-daemon" "Avahi is a free zeroconf implementation, including a system for multicast DNS/DNS-SD service discovery. Avahi allows programs to publish and discover services and hosts running on a local network with no specific configuration. For example, a user can plug a computer into a network and Avahi automatically finds printers to print to, files to look at and people to talk to, as well as network services running on the machine. Automatic discovery of network services is not normally required for system functionality. It is recommended to remove this package to reduce the potential attack surface."
+
+
