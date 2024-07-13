@@ -120,9 +120,11 @@ uninstall_app_func() {
     local app="$1"
     local reason="$2"
     local answer='null'
-    dpkg-query -W -f='${binary:Package}\t${Status}\t${db:Status-Status}\n' "$app" 2>/dev/null | grep -q 'ok'
-    if [ $? -eq 0 ]; then
-        echo -e "${YELLOW} - $app is installed.${RESET}"
+    dpkg-query -W -f='${binary:Package}\t${Status}\t${db:Status-Status}\n' "$app" 2>/dev/null | grep -q -w 'ok not-installed        not-installed' | grep -q -w 'no packages found matching'
+    if [ $? -ne 0 ]; then # if not-installed
+        echo -e "${GREEN} - \"$app\" isnt installed.${RESET}"
+    else
+        echo -e "${YELLOW} - \"$app\" is installed.${RESET}"
         echo -e "${YELLOW}Reason to uninstall \"$app\": ${RESET}${CYAN}$reason${RESET}"
         echo -e -n "${YELLOW}Uninstall? (default n) (y/n): ${RESET}"
         read answer
@@ -130,11 +132,11 @@ uninstall_app_func() {
         if [ $answer == 'y' ] 2>/dev/null; then
             apt purge "$app" -y
             error_check_func "Error uninstalling \"$app\""
+            apt autoremove
+            apt autoclean
         else
-            echo -e "${YELLOW} - $app skipped.${RESET}"
+            echo -e "${YELLOW} - \"$app\" skipped.${RESET}"
         fi
-    else
-        echo -e "${GREEN} - $app isnt installed.${RESET}"
     fi
 }
 
@@ -362,4 +364,9 @@ uninstall_app_func "telnet" "The telnet package contains the telnet client, whic
 ## Ensure Avahi Server is not installed.
 uninstall_app_func "avahi-daemon" "Avahi is a free zeroconf implementation, including a system for multicast DNS/DNS-SD service discovery. Avahi allows programs to publish and discover services and hosts running on a local network with no specific configuration. For example, a user can plug a computer into a network and Avahi automatically finds printers to print to, files to look at and people to talk to, as well as network services running on the machine. Automatic discovery of network services is not normally required for system functionality. It is recommended to remove this package to reduce the potential attack surface."
 
+## Ensure CUPS is not installed.
+uninstall_app_func "cups" "The Common Unix Print System (CUPS) provides the ability to print to both local and network printers. A system running CUPS can also accept print jobs from remote systems and print them to local printers. It also provides a web based remote administration capability. If the system does not need to print jobs or accept print jobs from other systems, it is recommended that CUPS be removed to reduce the potential attack surface."
+
+## Ensure DHCP Server is not installed.
+uninstall_app_func "isc-dhcp-server" "The Dynamic Host Configuration Protocol (DHCP) is a service that allows machines to be dynamically assigned IP addresses. Unless a system is specifically set up to act as a DHCP server, it is recommended that this package be removed to reduce the potential attack surface."
 
