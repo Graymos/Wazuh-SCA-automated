@@ -120,10 +120,9 @@ uninstall_app_func() {
     local app="$1"
     local reason="$2"
     local answer='null'
-    dpkg-query -W -f='${binary:Package}\t${Status}\t${db:Status-Status}\n' "$app" 2>/dev/null | grep -q -w 'ok not-installed        not-installed' | grep -q -w 'no packages found matching'
-    if [ $? -ne 0 ]; then # if not-installed
-        echo -e "${GREEN} - \"$app\" isnt installed.${RESET}"
-    else
+    #dpkg-query -W -f='${binary:Package}\t${Status}\t${db:Status-Status}\n' "$app" 2>/dev/null | grep -w 'ok not-installed        not-installed' | grep -w 'no packages found matching'
+    #if [ $? -ne 0 ]; then # if not-installed
+    if which "$app" >/dev/null; then
         echo -e "${YELLOW} - \"$app\" is installed.${RESET}"
         echo -e "${YELLOW}Reason to uninstall \"$app\": ${RESET}${CYAN}$reason${RESET}"
         echo -e -n "${YELLOW}Uninstall? (default n) (y/n): ${RESET}"
@@ -137,10 +136,12 @@ uninstall_app_func() {
         else
             echo -e "${YELLOW} - \"$app\" skipped.${RESET}"
         fi
+    else
+        echo -e "${GREEN} - \"$app\" isnt installed.${RESET}"
     fi
 }
 
-# --Start of script--
+# --Start of ssh part of script--
 
 # Check if script is running as root (UID 0)
 if [ "$UID" -eq 0 ]
@@ -353,7 +354,7 @@ perms_ownership_check_func "0644" "root" "root" "/etc/issue.net"
 error_check_func "Couldn't set permissions or user/group ownership on /etc/issue.net"
 
 
-# Checking all apps that shouldnt (security reasons) be installed unless needed
+# Checking all apps that shouldnt (for security reasons) be installed unless needed because of increasing attack surface
 echo " - Checking applications to reduce the attack surface (not necessarily insecure but it can increase attack surface)"
 ## Ensure X Window System is not installed
 uninstall_app_func "xserver-xorg" "The X Window System provides a Graphical User Interface (GUI) where users can have multiple windows in which to run programs and various add on. The X Windows system is typically used on workstations where users login, but not on servers where users typically do not login. Unless your organization specifically requires graphical login access via X Windows, remove it to reduce the potential attack surface."
