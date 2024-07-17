@@ -1,4 +1,4 @@
-#!/bin/bash
+ #!/bin/bash
 
 # Author: Grayson Mosley
 # Automates hardening of systems through recommended SCA through wazuh (based off of a SCA)
@@ -21,7 +21,7 @@ reset_changes_count_func() {
     total_changes_count=$((changes_count + total_changes_count))
     changes_count=0
 }
-add_to_changes_count_func() { 
+add_to_changes_count_func() {
     changes_count=$((changes_count + 1))
     return 0
 }
@@ -397,4 +397,21 @@ uninstall_app_func "nis" "The Network Information Service (NIS) (formally known 
 ## Ensure dnsmasq is not installed.
 uninstall_app_func "dnsmasq" "dnsmasq is a lightweight tool that provides DNS caching, DNS forwarding and DHCP (Dynamic Host Configuration Protocol) services. Unless a system is specifically designated to act as a DNS caching, DNS forwarding and/or DHCP server, it is recommended that the package be removed to reduce the potential attack surface."
 
+## Ensure rsync service is either not installed or is masked.
+uninstall_app_func "rsync" "The rsync service can be used to synchronize files between systems over network links. The rsync service presents a security risk as the rsync protocol is unencrypted. The rsync package should be removed or if required for dependencies, the rsync service should be stopped and masked to reduce the attack area of the system."
+
+## Ensure rsh client is not installed.
+uninstall_app_func "rsh-client" "The rsh-client package contains the client commands for the rsh services. These legacy clients contain numerous security exposures and have been replaced with the more secure SSH package. Even if the server is removed, it is best to ensure the clients are also removed to prevent users from inadvertently attempting to use these commands and therefore exposing their credentials. Note that removing the rsh-client package removes the clients for rsh, rcp and rlogin."
+
+## Ensure rsh client is not installed.
+uninstall_app_func "talk" "The talk software makes it possible for users to send and receive messages across systems through a terminal session. The talk client, which allows initialization of talk sessions, is installed by default. The software presents a security risk as it uses unencrypted protocols for communication."
+
+
+## Ensure LDAP client is not installed.
+uninstall_app_func "ldap-utils" "The Lightweight Directory Access Protocol (LDAP) was introduced as a replacement for NIS/YP. It is a service that provides a method for looking up information from a central database. If the system will not need to act as an LDAP client, it is recommended that the software be removed to reduce the potential attack surface."
+
+## Ensure RPC is not installed.
+uninstall_app_func "rpcbind" "Remote Procedure Call (RPC) is a method for creating low level client server applications across different system architectures. It requires an RPC compliant client listening on a network port. The supporting package is rpcbind. If RPC is not required, it is recommended that this services be removed to reduce the remote attack surface."
+
 ## 
+
