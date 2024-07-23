@@ -1,4 +1,4 @@
- #!/bin/bash
+#!/bin/bash
 
 # Author: Grayson Mosley
 # Automates hardening of systems through recommended SCA through wazuh (based off of a SCA)
@@ -137,6 +137,16 @@ uninstall_app_func() {
     fi
 }
 
+## Func for restarting ssh if changes made so applies new rules
+restart_ssh_func() {
+    if [ $changes_count -ne 0 ]; then
+        systemctl reload ssh
+        echo "Pausing for 10 seconds to let ssh reload"
+        sleep 1
+        reset_changes_count_func
+    fi
+}
+
 # --Start of ssh part of script--
 
 ## Check if script is running as root (UID 0)
@@ -147,6 +157,9 @@ else
     echo -e "${RED}Script requires root privileges${RESET}"
     exit 1  # Exit with an error code
 fi
+
+## Updates and upgrades system before starting
+#apt update && apt upgrade
 
 # SSH
 echo -e "${CYAN}SSH:\n   All sshd_config settings that this script makes is in /etc/ssh/sshd_config.d/SCA-script.conf so if any settings are conflicting with needed purpose of machine, this is where you would modify settings${RESET}"
@@ -282,13 +295,7 @@ awk '{print}' <<< "$(find -L /etc/ssh -xdev -type f -exec stat -Lc "%n %#a %U %G
 )
 
 ## Restarting ssh if changes made so applies new rules
-
-if [ $changes_count -ne 0 ]; then
-    systemctl reload ssh
-    echo "Pausing for 10 seconds to let ssh reload"
-    sleep 1
-    reset_changes_count_func
-fi
+restart_ssh_func
 
 # --SSH ends here--
 
@@ -413,5 +420,84 @@ uninstall_app_func "ldap-utils" "The Lightweight Directory Access Protocol (LDAP
 ## Ensure RPC is not installed.
 uninstall_app_func "rpcbind" "Remote Procedure Call (RPC) is a method for creating low level client server applications across different system architectures. It requires an RPC compliant client listening on a network port. The supporting package is rpcbind. If RPC is not required, it is recommended that this services be removed to reduce the remote attack surface."
 
-## 
+# -- End of uninstallation check --
 
+# Ensuring bluetooth is disabled
+echo -e " - Checking if bluetooth is disabled"
+if [[ $(systemctl is-active bluetooth.service) != 'inactive' ]]; then
+    echo -e "${YELLOW} - Stopping and disabling bluetooth. ${RESET}"
+    systemctl stop bluetooth.service
+    error_check_func "Failed to stop bluetooth service"
+    systemctl mask bluetooth.service
+    error_check_func "Failed to mask bluetooth service"
+    systemctl disable bluetooth.service
+    error_check_func "Failed to disable bluetooth service"
+else
+    echo -e "${GREEN} - Bluetooth is already disabled. ${RESET}"
+fi
+
+# --All UFW--
+## Ensure ufw is installed.
+echo -e " - Checking if UFW firewall is installed"
+if [[ $(dpkg-query -s ufw | grep "install ok installed") != "Status: install ok installed" ]]; then
+    echo -e "${YELLOW} - UFW firewall not installed. Installing UFW. ${RESET}"
+    apt install ufw -y
+    error_check_func "Failed to install UFW"
+else
+    echo -e "${GREEN} - UFW is already installed. ${RESET}"
+fi
+
+
+## Ensure iptables-persistent is not installed with ufw.
+echo -e " - Checking if iptables-persistent is uninstalled"
+uninstall_app_func "iptables-persistent" "The iptables-persistent is a boot-time loader for netfilter rules, iptables plugin. Running both ufw and the services included in the iptables-persistent package may lead to conflict."
+
+## Ensure ufw service is enabled
+echo -e " - Checking if UFW service is enabled"
+if [[ $(systemctl is-active ufw) != 'active' ]]; then
+    echo -e "${YELLOW} - UFW service is disabled. Enabling UFW (be careful when adding rules because can lock yourself out). ${RESET}"
+    systemctl unmask ufw
+    error_check_func "Failed to unmask ufw"
+    systemctl enable ufw
+    error_check_func "Failed to enable ufw through systemctl"
+    systemctl start ufw
+    error_check_func "Failed to start ufw"
+    ufw enable
+    error_check_func "Failed to enable ufw through command: \"ufw enable\""
+else
+    echo -e "${GREEN} - UFW service is already enabled${RESET}"
+fi
+
+## Ensure ufw loopback traffic is configured.
+echo -e " - Checking if ufw loopback traffic is configured."
+if [[ $(ufw status verbose | grep "Anywhere on lo             ALLOW IN    Anywhere") != "Anywhere on lo             ALLOW IN    Anywhere" ]]; then
+    echo -e "${YELLOW} - Configuring to allow in on lo.${RESET}"
+    ufw allow in on lo
+    error_check_func "Failed to set ufw rule to allow in on lo."
+else
+    echo -e "${GREEN} - Already configured to allow in on lo.${RESET}"
+fi
+
+if [[ $(ufw status verbose | grep "Anywhere                   ALLOW OUT   Anywhere on lo") != "Anywhere                   ALLOW OUT   Anywhere on lo" ]]; then
+    echo -e "${YELLOW} - Configuring to allow out on lo.${RESET}"
+    ufw allow out on lo
+    error_check_func "Failed to set ufw rule to allow out on lo."
+else
+    echo -e "${GREEN} - Already configured to allow on on lo.${RESET}"
+fi
+
+if [[ $(ufw status verbose | grep "Anywhere                   DENY IN     127.0.0.0/8") != "Anywhere                   DENY IN     127.0.0.0/8" ]]; then
+    echo -e "${YELLOW} - Configuring to deny in from 127.0.0.0/8${RESET}"
+    ufw deny in from 127.0.0.0/8
+    error_check_func "Failed to set ufw rule to deny in from 127.0.0.0/8"
+else
+    echo -e "${GREEN} - Already configured to deny in from 127.0.0.0/8${RESET}"
+fi
+
+if [[ $(ufw status verbose | grep "Anywhere (v6)              DENY IN     ::1") != "Anywhere (v6)              DENY IN     ::1" ]]; then
+    echo -e "${YELLOW} - Configuring to deny in from ::1${RESET}"
+    ufw deny in from ::1
+    error_check_func "Failed to set ufw rule to deny in from ::1"
+else
+    echo -e "${GREEN} - Already configured to deny in from ::1${RESET}"
+fi
