@@ -470,34 +470,94 @@ fi
 
 ## Ensure ufw loopback traffic is configured.
 echo -e " - Checking if ufw loopback traffic is configured."
-if [[ $(ufw status verbose | grep "Anywhere on lo             ALLOW IN    Anywhere") != "Anywhere on lo             ALLOW IN    Anywhere" ]]; then
+if [[ $((ufw status verbose) | grep "Anywhere on lo             ALLOW IN    Anywhere") ]]; then
+    echo -e "${GREEN} - Already configured to allow in on lo.${RESET}"
+else
     echo -e "${YELLOW} - Configuring to allow in on lo.${RESET}"
     ufw allow in on lo
     error_check_func "Failed to set ufw rule to allow in on lo."
-else
-    echo -e "${GREEN} - Already configured to allow in on lo.${RESET}"
 fi
 
-if [[ $(ufw status verbose | grep "Anywhere                   ALLOW OUT   Anywhere on lo") != "Anywhere                   ALLOW OUT   Anywhere on lo" ]]; then
+if [[ $((ufw status verbose) | grep "Anywhere                   ALLOW OUT   Anywhere on lo") ]]; then
+    echo -e "${GREEN} - Already configured to allow on on lo.${RESET}"
+
+else
     echo -e "${YELLOW} - Configuring to allow out on lo.${RESET}"
     ufw allow out on lo
     error_check_func "Failed to set ufw rule to allow out on lo."
-else
-    echo -e "${GREEN} - Already configured to allow on on lo.${RESET}"
 fi
 
-if [[ $(ufw status verbose | grep "Anywhere                   DENY IN     127.0.0.0/8") != "Anywhere                   DENY IN     127.0.0.0/8" ]]; then
+if [[ $((ufw status verbose) | grep "Anywhere                   DENY IN     127.0.0.0/8") ]]; then
+    echo -e "${GREEN} - Already configured to deny in from 127.0.0.0/8${RESET}"
+else
     echo -e "${YELLOW} - Configuring to deny in from 127.0.0.0/8${RESET}"
     ufw deny in from 127.0.0.0/8
     error_check_func "Failed to set ufw rule to deny in from 127.0.0.0/8"
-else
-    echo -e "${GREEN} - Already configured to deny in from 127.0.0.0/8${RESET}"
 fi
 
-if [[ $(ufw status verbose | grep "Anywhere (v6)              DENY IN     ::1") != "Anywhere (v6)              DENY IN     ::1" ]]; then
+if [[ $((ufw status verbose) | grep "Anywhere (v6)              DENY IN     ::1") ]]; then
+    echo -e "${GREEN} - Already configured to deny in from ::1${RESET}"
+else
     echo -e "${YELLOW} - Configuring to deny in from ::1${RESET}"
     ufw deny in from ::1
     error_check_func "Failed to set ufw rule to deny in from ::1"
-else
-    echo -e "${GREEN} - Already configured to deny in from ::1${RESET}"
 fi
+
+
+# Ensure ufw default deny firewall policy.
+
+echo -e " - Checking ufw default deny policies"
+
+## Ensure ufw rule default deny incoming is set
+(   ### Starting subshell so then variables created are only local
+if [[ $((ufw status verbose) | grep "deny (incoming)") ]]; then
+    echo -e "${GREEN} - Already configured to default deny incoming. ${RESET}"
+else
+    answer=""
+    echo -e -n "${YELLOW} - Not configured to defaultly deny incoming. Do you want to? (Make sure that ips of machines that you want access to this machine through ports you need access through are already configured before selecting yes) (y/n): ${RESET}"
+    read answer
+    answer=${answer,,}
+    if [[ answer == "y" ]]; then
+        ufw default deny incoming
+        error_check_func "Failed to add ufw rule: \"ufw default deny incoming\""
+    else
+        echo -e "${YELLOW} - Skipping${RESET}"
+    fi
+fi
+)
+## Ufw default deny outgoing
+(
+if [[ $((ufw status verbose) | grep "deny (outgoing)") ]]; then
+    echo -e "${GREEN} - Already configured to default deny outgoing. ${RESET}"
+else
+    answer=""
+    echo -e -n "${YELLOW} - Not configured to defaultly deny outgoing. Do you want to? (Make sure that anything you want access to from this machine already configured before selecting yes) (y/n): ${RESET}"
+    read answer
+    answer=${answer,,}
+    if [[ answer == "y" ]]; then
+        ufw default deny outgoing
+        error_check_func "Failed to add ufw rule: \"ufw default deny outgoing\""
+    else
+        echo -e "${YELLOW} - Skipping${RESET}"
+    fi
+fi
+)
+
+## Ufw default deny routed
+(
+if [[ $((ufw status verbose) | grep "disabled (routed)") ]]; then
+    echo -e "${GREEN} - Already configured to default deny routing. ${RESET}"
+else
+    answer=""
+    echo -e -n "${YELLOW} - Not configured to defaultly deny routing. Do you want to? (Make sure that there is nothing that you want routed through this machine and if so, already set up before selecting yes) (y/n): ${RESET}"
+    read answer
+    answer=${answer,,}
+    if [[ answer == "y" ]]; then
+        ufw default deny routed
+        error_check_func "Failed to add ufw rule \"ufw default deny routed\""
+    else
+        echo -e "${YELLOW} - Skipping${RESET}"
+    fi
+fi
+)
+
