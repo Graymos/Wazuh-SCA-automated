@@ -44,19 +44,19 @@ file_pattern_check_func() {
             echo -e "${RED}Error:${RESET} Command failed for searching for \"$pattern\" in $file."
             exit 1
         fi
-        echo -e "${GREEN} - \"$pattern\" rule already set in $file${RESET}"
+        echo -e "${GREEN} - \"$pattern\" already set in $file${RESET}"
     else
-        echo -e "${YELLOW} - Adding \"$pattern\" rule in $file${RESET}"
+        echo -e "${YELLOW} - Adding \"$pattern\" in $file${RESET}"
         echo -e "$pattern" >> "$file"
         if [ $? -ne 0 ]; then
-            echo -e "${RED}Error:${RESET} Command failed for appending rule \"$pattern\" to $file."
+            echo -e "${RED}Error:${RESET} Command failed for appending \"$pattern\" to $file."
             exit 1
         fi
         add_to_changes_count_func
     fi
 }
 
-## Function for checking perms and ownership (changing to root) of file
+## Function for checking perms and ownership (changing to root) of files inside a specified dir or a specific file specified
 perms_ownership_check_func() {
     local l_maxperm="$1"
     local l_owner_parameter="$2"
@@ -72,7 +72,6 @@ perms_ownership_check_func() {
                 echo -e "${YELLOW} - File: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
                 chmod "$l_maxperm" "$l_file"
                 error_check_func "Couldn't set permissions to \"$l_maxperm\" on \"$l_dir\""
-                add_to_changes_count_func
             else
                 echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
             fi
@@ -80,7 +79,6 @@ perms_ownership_check_func() {
                 echo -e "${YELLOW} - File: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"$l_owner_parameter\"${RESET}"
                 chown "$l_owner_parameter" "$l_file"
                 error_check_func "Couldn't set user ownership to \"l_owner_parameter\" on \"$l_dir\""
-                add_to_changes_count_func
             else
                 echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
             fi
@@ -88,13 +86,50 @@ perms_ownership_check_func() {
                 echo -e "${YELLOW} - File: \"$l_file\" is owned by group \"$l_group\" changing to group \"$l_group_parameter\"${RESET}"
                 chgrp "$l_group_parameter" "$l_file"
                 error_check_func "Couldn't set group ownership to \"$l_group_parameter\" on \"$l_dir\""
-		add_to_changes_count_func
             else
                 echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
             fi
         done
     )
     return 0
+}
+
+## Checks perms and user/group ownership of a dir
+perms_ownership_check_dir_func() {
+    local l_maxperm="$1"
+    local l_owner_parameter="$2"
+    local l_group_parameter="$3"
+    local l_dir="$4"
+    local l_pmask="$( printf '%o' $(( 0777 & ~$l_maxperm)) )"
+    l_pmask="0$l_pmask"
+
+    awk '{print}' <<< "$(stat -Lc "%n %#a %U %G" $l_dir)" | (
+    read -r l_file l_mode l_owner l_group
+    echo -e " - Checking dir permissions and user/group ownership: \"$l_dir\""
+    if [ $(( l_mode & l_pmask )) -gt 0 ]; then
+        echo -e "${YELLOW} - Dir: \"$l_file\" is mode \"$l_mode\" changing to mode: \"$l_maxperm\"${RESET}"
+        chmod "$l_maxperm" "$l_file"
+        error_check_func "Couldn't set permissions to \"$l_maxperm\" on \"$l_dir\""
+    else
+        echo -e "${GREEN} - Proper permissions for $l_file: already set to $l_mode${RESET}"
+    fi
+    if [ "$l_owner" != "$l_owner_parameter" ]; then
+        echo -e "${YELLOW} - Dir: \"$l_file\" is owned by: \"$l_owner\" changing owner to \"$l_owner_parameter\"${RESET}"
+        chown "$l_owner_parameter" "$l_file"
+        error_check_func "Couldn't set user ownership to \"l_owner_parameter\" on \"$l_dir\""
+    else
+        echo -e "${GREEN} - Proper user ownership for $l_file: already set to $l_owner${RESET}"
+    fi
+    if [ "$l_group" != "$l_group_parameter" ]; then
+        echo -e "${YELLOW} - Dir: \"$l_file\" is owned by group \"$l_group\" changing to group \"$l_group_parameter\"${RESET}"
+        chgrp "$l_group_parameter" "$l_file"
+        error_check_func "Couldn't set group ownership to \"$l_group_parameter\" on \"$l_dir\""
+    else
+        echo -e "${GREEN} - Proper group ownership for $l_file: already set to $l_group${RESET}"
+    fi
+
+)
+return 0
 }
 
 ## Checks if a file exists, if it doesnt then creates it
@@ -229,6 +264,9 @@ file_pattern_check_func "MaxSessions 10" "$ssh_file"
 ## Ensure SSH Idle Timeout Interval is configured.
 file_pattern_check_func "ClientAliveInterval 15" "$ssh_file"
 file_pattern_check_func "ClientAliveCountMax 3" "$ssh_file"
+
+## Ensure ssh access is limited to AllowUsers and AllowGroups
+file_pattern_check_func "AllowGroups users manage sudo" "$ssh_file"
 
 ## --SCA-script.conf added rules ends here--
 
@@ -560,4 +598,59 @@ else
     fi
 fi
 )
+
+# Ensuring permissions on cron
+
+## Ensure permissions on file /etc/crontab are configured.
+perms_ownership_check_func "0600" "root" "root" "/etc/crontab"
+
+## Ensure permissions on dir /etc/cron.hourly are configured.
+perms_ownership_check_dir_func "0700" "root" "root" "/etc/cron.hourly"
+
+## Ensure permissions on /etc/cron.daily are configured.
+perms_ownership_check_dir_func "0700" "root" "root" "/etc/cron.daily"
+
+## Ensure permissions on /etc/cron.weekly are configured.
+perms_ownership_check_dir_func "0700" "root" "root" "/etc/cron.weekly"
+
+## Ensure permissions on /etc/cron.monthly are configured.
+perms_ownership_check_dir_func "0700" "root" "root" "/etc/cron.monthly"
+
+## Ensure permissions on /etc/cron.d are configured.
+perms_ownership_check_dir_func "0700" "root" "root" "/etc/cron.d"
+
+
+# Ensure cron is restricted to authorized users
+echo " - Checking for cron.allow and authorized root user in cron.allow"
+if test -f /etc/cron.allow; then
+    if grep -q 'root' /etc/cron.allow; then
+        echo -e "${GREEN} - Only authorized cron user is already root.${RESET}"
+    else
+        file_pattern_check_func "root" "/etc/cron.allow"
+    fi
+else
+    touch /etc/cron.allow
+    file_pattern_check_func "root" "/etc/cron.allow"
+fi
+
+## Checking permissions and group/user ownership of /etc/cron.allow
+perms_ownership_check_func "0640" "root" "crontab" "/etc/cron.allow"
+
+
+
+# Ensure `at` is restricted to authorized users
+echo " - Checking for at.allow and authorized root user in at.allow"
+if test -f /etc/at.allow; then
+    if grep -q 'root' /etc/at.allow; then
+        echo -e "${GREEN} - Only authorized `at` user is already root.${RESET}"
+    else
+        file_pattern_check_func "root" "/etc/at.allow"
+    fi
+else
+    touch /etc/at.allow
+    file_pattern_check_func "root" "/etc/at.allow"
+fi
+
+## Checking permissions and group/user ownership of /etc/at.allow
+perms_ownership_check_func "0640" "root" "root" "/etc/at.allow"
 
