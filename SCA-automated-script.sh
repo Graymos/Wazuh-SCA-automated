@@ -636,13 +636,11 @@ fi
 ## Checking permissions and group/user ownership of /etc/cron.allow
 perms_ownership_check_func "0640" "root" "crontab" "/etc/cron.allow"
 
-
-
 # Ensure `at` is restricted to authorized users
 echo " - Checking for at.allow and authorized root user in at.allow"
-if test -f /etc/at.allow; then
-    if grep -q 'root' /etc/at.allow; then
-        echo -e "${GREEN} - Only authorized `at` user is already root.${RESET}"
+if test -f "/etc/at.allow"; then
+    if grep -q 'root' "/etc/at.allow"; then
+        echo -e "${GREEN} - Only authorized 'at' user is already root.${RESET}"
     else
         file_pattern_check_func "root" "/etc/at.allow"
     fi
@@ -653,4 +651,37 @@ fi
 
 ## Checking permissions and group/user ownership of /etc/at.allow
 perms_ownership_check_func "0640" "root" "root" "/etc/at.allow"
+
+# Ensure sudo commands use pty.
+echo " - Checking for \"/etc/sudoers.d/SCA-automated-sudoers\""
+if test -f /etc/sudoers.d/SCA-automated-sudoers; then
+    if grep -q "Defaults use_pty" /etc/sudoers.d/SCA-automated-sudoers; then
+        echo -e "${GREEN} - \"Defaults use_pty\" rule already set in \"/etc/sudoers.d/SCA-automated-sudoers\"${RESET}"
+    else
+        file_pattern_check_func "Defaults use_pty" "/etc/sudoers.d/SCA-automated-sudoers"
+    fi
+else
+    touch /etc/sudoers.d/SCA-automated-sudoers
+    file_pattern_check_func "Defaults use_pty" "/etc/sudoers.d/SCA-automated-sudoers"
+fi
+
+## Checking permissions and group/user ownership of /etc/sudoers.d/SCA-automated-sudoers
+perms_ownership_check_func "0600" "root" "root" "/etc/sudoers.d/SCA-automated-sudoers"
+
+# Ensure sudo log file exists
+echo " - Checking for \"/var/log/sudo.log\""
+if test -f /var/log/sudo.log; then
+    if grep -q 'Defaults logfile="/var/log/sudo.log"' /etc/sudoers.d/SCA-automated-sudoers; then
+        echo -e "${GREEN} - \"Defaults logfile=\"/var/log/sudo.log\"\" rule already set in \"/etc/sudoers.d/SCA-automated-sudoers\"${RESET}"
+    else
+        file_pattern_check_func 'Defaults logfile="/var/log/sudo.log"' '/etc/sudoers.d/SCA-automated-sudoers'
+    fi
+else
+    touch /var/log/sudo.log
+    file_pattern_check_func 'Defaults logfile="/var/log/sudo.log"' "/etc/sudoers.d/SCA-automated-sudoers"
+fi
+
+## Checking permissions and group/user ownership of /var/log/sudo.log
+perms_ownership_check_func "0600" "root" "root" "/var/log/sudo.log"
+
 
