@@ -182,6 +182,19 @@ restart_ssh_func() {
     fi
 }
 
+## Deletes the line where inputted string is found in a file
+delete_these_lines_func() {
+    local search_for_this="$1"
+    local file_to_search_in="$2"
+    if grep "$search_for_this" "$file_to_search_in"; then
+        echo -e "${YELLOW} - Deleting lines with '$search_for_this' in file '$file_to_search_in'${RESET}"
+        sed -i "/$search_for_this/d" "$file_to_search_in"
+        error_check_func "Couldn't remove line where \"$search_for_this\" is found from file \"$file_to_search_in\""
+    else
+        echo -e "${GREEN} - $search_for_this already not found in $file_to_search_in${RESET}"
+    fi
+}
+
 # --Start of ssh part of script--
 
 ## Check if script is running as root (UID 0)
@@ -685,3 +698,14 @@ fi
 perms_ownership_check_func "0600" "root" "root" "/var/log/sudo.log"
 
 
+# Ensure users must provide password for privilege escalation.
+echo " - Checking /etc/sudoers for insecure configurations"
+delete_these_lines_func "NOPASSWD" "/etc/sudoers"
+
+# Ensure re-authentication for privilege escalation is not disabled globally.
+delete_these_lines_func "!authenticate" "/etc/sudoers"
+
+# Ensure sudo authentication timeout is configured correctly.
+file_pattern_check_func "Defaults env_reset, timestamp_timeout=15" "/etc/sudoers.d/SCA-automated-sudoers"
+
+# Ensure access to the su command is restricted.
